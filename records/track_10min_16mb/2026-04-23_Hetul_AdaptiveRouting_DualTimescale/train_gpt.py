@@ -337,6 +337,28 @@ def deserialize(h,device):
 	with open(h.quantized_model_path,'rb')as f:quant_blob_disk=f.read()
 	quant_state=torch.load(io.BytesIO(_decompress(quant_blob_disk,h.compressor)),map_location='cpu');deq_state=dequantize_mixed(quant_state['w'],quant_state['m'],sd_cpu);eval_model.load_state_dict(deq_state,strict=True);return eval_model
 def _loss_bpb(loss_sum,token_count,byte_count):val_loss=(loss_sum/token_count).item();val_bpb=val_loss/math.log(2.)*(token_count.item()/byte_count.item());return val_loss,val_bpb
+def _new_lexical_cache(h):return collections.OrderedDict()if h.use_lexical_cache and h.lexical_cache_topk>0 and h.lexical_cache_size>0 else None
+def _lexical_cache_bias_logits(logits_row,prev_token,cache,h):
+	if cache is None:return logits_row
+	entry=cache.get(int(prev_token))
+	if not entry:return logits_row
+	top_items=sorted(entry.items(),key=lambda kv:kv[1],reverse=True)[:h.lexical_cache_topk]
+	if not top_items:return logits_row
+	idx=torch.tensor([tok for(tok,_)in top_items],device=logits_row.device,dtype=torch.long);counts=torch.tensor([cnt for(_,cnt)in top_items],device=logits_row.device,dtype=logits_row.dtype);biased=logits_row.clone();biased.index_add_(0,idx,h.lexical_cache_strength*torch.log1p(counts));return biased
+def _lexical_cache_update(cache,prev_token,next_token,h):
+	if cache is None:return
+	prev=int(prev_token);nxt=int(next_token);entry=cache.get(prev)
+	if entry is None:
+		if len(cache)>=h.lexical_cache_size:cache.popitem(last=False)
+		entry={};cache[prev]=entry
+	else:cache.move_to_end(prev,last=True)
+	for k in list(entry.keys()):
+		v=entry[k]*h.lexical_cache_decay
+		if v<=1e-08:del entry[k]
+		else:entry[k]=v
+	entry[nxt]=entry.get(nxt,0.)+1.
+	if len(entry)>h.lexical_cache_topk:
+		for(k,_)in sorted(entry.items(),key=lambda kv:kv[1],reverse=True)[h.lexical_cache_topk:]:del entry[k]
 def eval_val(h,device,val_data,model):
 	seq_len=h.eval_seq_len;local_batch_tokens=h.val_batch_tokens//(h.world_size*h.grad_accum_steps)
 	if local_batch_tokens<seq_len:raise ValueError(f"VAL_BATCH_SIZE must provide at least one sequence per rank; got VAL_BATCH_SIZE={h.val_batch_tokens}, WORLD_SIZE={h.world_size}, GRAD_ACCUM_STEPS={h.grad_accum_steps}, seq_len={seq_len}")
@@ -349,20 +371,27 @@ def eval_val(h,device,val_data,model):
 	if dist.is_available()and dist.is_initialized():dist.all_reduce(val_loss_sum,op=dist.ReduceOp.SUM);dist.all_reduce(val_token_count,op=dist.ReduceOp.SUM);dist.all_reduce(val_byte_count,op=dist.ReduceOp.SUM)
 	model.train();return _loss_bpb(val_loss_sum,val_token_count,val_byte_count)
 def eval_val_sliding(h,device,val_data,base_model,batch_seqs=32):
-	base_model.eval();logits_fn=torch.compile(base_model.forward_logits,dynamic=False,fullgraph=True);seq_len=h.eval_seq_len;context_size=seq_len-h.eval_stride;total_tokens=val_data.val_tokens.numel()-1;window_starts=[ws for ws in range(0,total_tokens,h.eval_stride)if ws+context_size<total_tokens];total_windows=len(window_starts);my_s=total_windows*h.rank//h.world_size;my_e=total_windows*(h.rank+1)//h.world_size;my_windows=window_starts[my_s:my_e];loss_sum=torch.zeros((),device=device,dtype=torch.float64);token_count=torch.zeros((),device=device,dtype=torch.float64);byte_count=torch.zeros((),device=device,dtype=torch.float64)
+	base_model.eval();logits_fn=torch.compile(base_model.forward_logits,dynamic=False,fullgraph=True);seq_len=h.eval_seq_len;context_size=seq_len-h.eval_stride;total_tokens=val_data.val_tokens.numel()-1;window_starts=[ws for ws in range(0,total_tokens,h.eval_stride)if ws+context_size<total_tokens];total_windows=len(window_starts);my_s=total_windows*h.rank//h.world_size;my_e=total_windows*(h.rank+1)//h.world_size;my_windows=window_starts[my_s:my_e];loss_sum=torch.zeros((),device=device,dtype=torch.float64);token_count=torch.zeros((),device=device,dtype=torch.float64);byte_count=torch.zeros((),device=device,dtype=torch.float64);lexical_cache=_new_lexical_cache(h)
 	with torch.inference_mode():
 		for bi in range(0,len(my_windows),batch_seqs):
 			batch_ws=my_windows[bi:bi+batch_seqs];bsz=len(batch_ws);x_batch=torch.zeros(bsz,seq_len,dtype=torch.int64,device=device);y_batch=torch.zeros(bsz,seq_len,dtype=torch.int64,device=device);wlens=[]
 			for(i,ws)in enumerate(batch_ws):we=min(ws+seq_len,total_tokens);wlen=we-ws;wlens.append(wlen);chunk=val_data.val_tokens[ws:we+1].to(dtype=torch.int64,device=device);x_batch[i,:wlen]=chunk[:-1];y_batch[i,:wlen]=chunk[1:]
 			with torch.autocast(device_type='cuda',dtype=torch.bfloat16):logits=logits_fn(x_batch)
-			nll=F.cross_entropy(logits.reshape(-1,logits.size(-1)).float(),y_batch.reshape(-1),reduction='none').reshape(bsz,seq_len)
-			for(i,ws)in enumerate(batch_ws):wlen=wlens[i];s=0 if ws==0 else context_size;scored_nll=nll[i,s:wlen].to(torch.float64);loss_sum+=scored_nll.sum();token_count+=float(wlen-s);tgt=y_batch[i,s:wlen];prev=x_batch[i,s:wlen];tb=val_data.base_bytes_lut[tgt].to(torch.float64);tb+=(val_data.has_leading_space_lut[tgt]&~val_data.is_boundary_token_lut[prev]).to(torch.float64);byte_count+=tb.sum()
+			for(i,ws)in enumerate(batch_ws):
+				wlen=wlens[i];s=0 if ws==0 else context_size;tgt=y_batch[i,s:wlen];prev=x_batch[i,s:wlen]
+				if lexical_cache is None:scored_nll=F.cross_entropy(logits[i,s:wlen].float(),tgt,reduction='none')
+				else:
+					scored_losses=[]
+					for pos in range(s,wlen):
+						biased_row=_lexical_cache_bias_logits(logits[i,pos].float(),x_batch[i,pos],lexical_cache,h);token_loss=F.cross_entropy(biased_row.unsqueeze(0),y_batch[i,pos].unsqueeze(0),reduction='none');scored_losses.append(token_loss);_lexical_cache_update(lexical_cache,x_batch[i,pos],y_batch[i,pos],h)
+					scored_nll=torch.cat(scored_losses,dim=0)if scored_losses else torch.zeros((0,),device=device,dtype=torch.float32)
+				scored_nll=scored_nll.to(torch.float64);loss_sum+=scored_nll.sum();token_count+=float(wlen-s);tb=val_data.base_bytes_lut[tgt].to(torch.float64);tb+=(val_data.has_leading_space_lut[tgt]&~val_data.is_boundary_token_lut[prev]).to(torch.float64);byte_count+=tb.sum()
 	if dist.is_available()and dist.is_initialized():dist.all_reduce(loss_sum,op=dist.ReduceOp.SUM);dist.all_reduce(token_count,op=dist.ReduceOp.SUM);dist.all_reduce(byte_count,op=dist.ReduceOp.SUM)
 	base_model.train();return _loss_bpb(loss_sum,token_count,byte_count)
 def eval_val_ttt(h,device,val_data,base_model,batch_seqs=32):
 	rank=h.rank;world_size=h.world_size;seq_len=h.eval_seq_len;stride=h.eval_stride;total_tokens=val_data.val_tokens.numel()-1;ttt_chunk=h.ttt_chunk_tokens;context_size=seq_len-stride;window_starts=[ws for ws in range(0,total_tokens,stride)if ws+context_size<total_tokens];num_chunks=(total_tokens+ttt_chunk-1)//ttt_chunk;chunk_windows=[[]for _ in range(num_chunks)]
 	for ws in window_starts:wlen=min(ws+seq_len,total_tokens)-ws;s=0 if ws==0 else context_size;scored_start=ws+s;ci=min(scored_start//ttt_chunk,num_chunks-1);chunk_windows[ci].append(ws)
-	log(f"ttt:start chunks={num_chunks} ttt_lr={h.ttt_lr} ttt_epochs={h.ttt_epochs}");compiled_logits=torch.compile(base_model.forward_logits,dynamic=False,fullgraph=True);loss_sum=torch.zeros((),device=device,dtype=torch.float64);token_count=torch.zeros((),device=device,dtype=torch.float64);byte_count=torch.zeros((),device=device,dtype=torch.float64);ttt_params=[p for p in base_model.parameters()]
+	log(f"ttt:start chunks={num_chunks} ttt_lr={h.ttt_lr} ttt_epochs={h.ttt_epochs}");compiled_logits=torch.compile(base_model.forward_logits,dynamic=False,fullgraph=True);loss_sum=torch.zeros((),device=device,dtype=torch.float64);token_count=torch.zeros((),device=device,dtype=torch.float64);byte_count=torch.zeros((),device=device,dtype=torch.float64);ttt_params=[p for p in base_model.parameters()];lexical_cache=_new_lexical_cache(h)
 	for p in ttt_params:p.requires_grad_(True)
 	optimizer=torch.optim.SGD(ttt_params,lr=h.ttt_lr,momentum=h.ttt_momentum)
 	for ci in range(num_chunks):
@@ -374,8 +403,15 @@ def eval_val_ttt(h,device,val_data,base_model,batch_seqs=32):
 				batch_ws=my_windows[bi:bi+batch_seqs];bsz=len(batch_ws);x_batch=torch.zeros(bsz,seq_len,dtype=torch.int64,device=device);y_batch=torch.zeros(bsz,seq_len,dtype=torch.int64,device=device);wlens=[]
 				for(i,ws)in enumerate(batch_ws):we=min(ws+seq_len,total_tokens);wlen=we-ws;wlens.append(wlen);chunk_tok=val_data.val_tokens[ws:we+1].to(dtype=torch.int64,device=device);x_batch[i,:wlen]=chunk_tok[:-1];y_batch[i,:wlen]=chunk_tok[1:]
 				with torch.autocast(device_type='cuda',dtype=torch.bfloat16):logits=compiled_logits(x_batch)
-				nll=F.cross_entropy(logits.reshape(-1,logits.size(-1)).float(),y_batch.reshape(-1),reduction='none').reshape(bsz,seq_len)
-				for(i,ws)in enumerate(batch_ws):wlen=wlens[i];s=0 if ws==0 else context_size;scored_nll=nll[i,s:wlen].to(torch.float64);loss_sum+=scored_nll.sum();token_count+=float(wlen-s);tgt=y_batch[i,s:wlen];prev=x_batch[i,s:wlen];tb=val_data.base_bytes_lut[tgt].to(torch.float64);tb+=(val_data.has_leading_space_lut[tgt]&~val_data.is_boundary_token_lut[prev]).to(torch.float64);byte_count+=tb.sum()
+				for(i,ws)in enumerate(batch_ws):
+					wlen=wlens[i];s=0 if ws==0 else context_size;tgt=y_batch[i,s:wlen];prev=x_batch[i,s:wlen]
+					if lexical_cache is None:scored_nll=F.cross_entropy(logits[i,s:wlen].float(),tgt,reduction='none')
+					else:
+						scored_losses=[]
+						for pos in range(s,wlen):
+							biased_row=_lexical_cache_bias_logits(logits[i,pos].float(),x_batch[i,pos],lexical_cache,h);token_loss=F.cross_entropy(biased_row.unsqueeze(0),y_batch[i,pos].unsqueeze(0),reduction='none');scored_losses.append(token_loss);_lexical_cache_update(lexical_cache,x_batch[i,pos],y_batch[i,pos],h)
+						scored_nll=torch.cat(scored_losses,dim=0)if scored_losses else torch.zeros((0,),device=device,dtype=torch.float32)
+					scored_nll=scored_nll.to(torch.float64);loss_sum+=scored_nll.sum();token_count+=float(wlen-s);tb=val_data.base_bytes_lut[tgt].to(torch.float64);tb+=(val_data.has_leading_space_lut[tgt]&~val_data.is_boundary_token_lut[prev]).to(torch.float64);byte_count+=tb.sum()
 		is_last_chunk=ci==num_chunks-1
 		if not is_last_chunk and h.ttt_epochs>0:
 			base_model.train();chunk_seqs=(chunk_end-chunk_start)//seq_len
