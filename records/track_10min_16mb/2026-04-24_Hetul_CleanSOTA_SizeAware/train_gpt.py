@@ -4,7 +4,7 @@ import random,re,subprocess,sys,time,uuid,numpy as np,sentencepiece as spm,torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch import Tensor,nn
 from flash_attn_interface import flash_attn_func as flash_attn_3_func
-class Hyperparameters:data_dir=os.environ.get('DATA_DIR','./data/');seed=int(os.environ.get('SEED',1337));run_id=os.environ.get('RUN_ID',str(uuid.uuid4()));iterations=int(os.environ.get('ITERATIONS',20000));warmdown_frac=float(os.environ.get('WARMDOWN_FRAC',.72));warmup_steps=int(os.environ.get('WARMUP_STEPS',20));train_batch_tokens=int(os.environ.get('TRAIN_BATCH_TOKENS',786432));train_seq_len=int(os.environ.get('TRAIN_SEQ_LEN',2048));train_log_every=int(os.environ.get('TRAIN_LOG_EVERY',500));max_wallclock_seconds=float(os.environ.get('MAX_WALLCLOCK_SECONDS',6e2));val_batch_tokens=int(os.environ.get('VAL_BATCH_TOKENS',524288));eval_seq_len=int(os.environ.get('EVAL_SEQ_LEN',2048));val_loss_every=int(os.environ.get('VAL_LOSS_EVERY',4000));sliding_window_enabled=bool(int(os.environ.get('SLIDING_WINDOW_ENABLED','1')));vocab_size=int(os.environ.get('VOCAB_SIZE',8192));num_layers=int(os.environ.get('NUM_LAYERS',11));xsa_last_n=int(os.environ.get('XSA_LAST_N',11));model_dim=int(os.environ.get('MODEL_DIM',512));embedding_dim=int(os.environ.get('EMBEDDING_DIM',512));num_kv_heads=int(os.environ.get('NUM_KV_HEADS',4));num_heads=int(os.environ.get('NUM_HEADS',8));mlp_mult=float(os.environ.get('MLP_MULT',4.));skip_gates_enabled=bool(int(os.environ.get('SKIP_GATES_ENABLED','1')));tie_embeddings=bool(int(os.environ.get('TIE_EMBEDDINGS','1')));logit_softcap=float(os.environ.get('LOGIT_SOFTCAP',3e1));rope_base=float(os.environ.get('ROPE_BASE',1e4));rope_dims=int(os.environ.get('ROPE_DIMS',16));rope_train_seq_len=int(os.environ.get('ROPE_TRAIN_SEQ_LEN',2048));ln_scale=bool(int(os.environ.get('LN_SCALE','1')));qk_gain_init=float(os.environ.get('QK_GAIN_INIT',5.));num_loops=int(os.environ.get('NUM_LOOPS',2));loop_start=int(os.environ.get('LOOP_START',3));loop_end=int(os.environ.get('LOOP_END',5));enable_looping_at=float(os.environ.get('ENABLE_LOOPING_AT',.35));adaptive_recurrence_routing=bool(int(os.environ.get('ADAPTIVE_RECURRENCE_ROUTING','0')));routing_entropy_threshold=float(os.environ.get('ROUTING_ENTROPY_THRESHOLD',3.6));routing_novelty_threshold=float(os.environ.get('ROUTING_NOVELTY_THRESHOLD',.78));dual_timescale_state=bool(int(os.environ.get('DUAL_TIMESCALE_STATE','0')));dts_slow_decay=float(os.environ.get('DTS_SLOW_DECAY',.985));dts_blend=float(os.environ.get('DTS_BLEND',.15));parallel_residual_start=int(os.environ.get('PARALLEL_RESIDUAL_START',7));min_lr=float(os.environ.get('MIN_LR',.0));embed_lr=float(os.environ.get('EMBED_LR',.6));head_lr=float(os.environ.get('HEAD_LR',.008));tied_embed_lr=float(os.environ.get('TIED_EMBED_LR',.03));tied_embed_init_std=float(os.environ.get('TIED_EMBED_INIT_STD',.005));matrix_lr=float(os.environ.get('MATRIX_LR',.022));scalar_lr=float(os.environ.get('SCALAR_LR',.02));muon_momentum=float(os.environ.get('MUON_MOMENTUM',.99));muon_backend_steps=int(os.environ.get('MUON_BACKEND_STEPS',5));muon_momentum_warmup_start=float(os.environ.get('MUON_MOMENTUM_WARMUP_START',.92));muon_momentum_warmup_steps=int(os.environ.get('MUON_MOMENTUM_WARMUP_STEPS',1500));muon_row_normalize=bool(int(os.environ.get('MUON_ROW_NORMALIZE','1')));beta1=float(os.environ.get('BETA1',.9));beta2=float(os.environ.get('BETA2',.95));adam_eps=float(os.environ.get('ADAM_EPS',1e-08));grad_clip_norm=float(os.environ.get('GRAD_CLIP_NORM',.3));eval_stride=int(os.environ.get('EVAL_STRIDE',64));muon_beta2=float(os.environ.get('MUON_BETA2',.95));adam_wd=float(os.environ.get('ADAM_WD',.02));muon_wd=float(os.environ.get('MUON_WD',.095));embed_wd=float(os.environ.get('EMBED_WD',.085));ema_decay=float(os.environ.get('EMA_DECAY',.9965));ttt_enabled=bool(int(os.environ.get('TTT_ENABLED','0')));ttt_lr=float(os.environ.get('TTT_LR',.005));ttt_epochs=int(os.environ.get('TTT_EPOCHS',3));ttt_momentum=float(os.environ.get('TTT_MOMENTUM',.9));ttt_chunk_tokens=int(os.environ.get('TTT_CHUNK_TOKENS',32768));confidence_gated_ttt=bool(int(os.environ.get('CONFIDENCE_GATED_TTT','0')));adaptive_ttt_credit=bool(int(os.environ.get('ADAPTIVE_TTT_CREDIT','0')));ttt_credit_upscale=float(os.environ.get('TTT_CREDIT_UPSCALE',1.4));ttt_credit_downscale=float(os.environ.get('TTT_CREDIT_DOWNSCALE',.4));ttt_credit_margin=float(os.environ.get('TTT_CREDIT_MARGIN',.005));ttt_entropy_threshold=float(os.environ.get('TTT_ENTROPY_THRESHOLD',3.6));ttt_low_conf_lr_scale=float(os.environ.get('TTT_LOW_CONF_LR_SCALE',1.0));ttt_high_conf_lr_scale=float(os.environ.get('TTT_HIGH_CONF_LR_SCALE',.25));use_rdc=bool(int(os.environ.get('USE_RDC','0')));rdc_lr=float(os.environ.get('RDC_LR',.01));rdc_momentum=float(os.environ.get('RDC_MOMENTUM',.9));rdc_decay=float(os.environ.get('RDC_DECAY',.995));rdc_clip=float(os.environ.get('RDC_CLIP',.05));use_ctr=bool(int(os.environ.get('USE_CTR','0')));ctr_scale_lr=float(os.environ.get('CTR_SCALE_LR',.01));ctr_shift_lr=float(os.environ.get('CTR_SHIFT_LR',.01));ctr_decay=float(os.environ.get('CTR_DECAY',.995));ctr_clip=float(os.environ.get('CTR_CLIP',.2));use_ttla=bool(int(os.environ.get('USE_TTLA','0')));ttla_dim=int(os.environ.get('TTLA_DIM',64));ttla_lr=float(os.environ.get('TTLA_LR',.01));ttla_decay=float(os.environ.get('TTLA_DECAY',.995));ttla_clip=float(os.environ.get('TTLA_CLIP',.1));use_lexical_cache=bool(int(os.environ.get('USE_LEXICAL_CACHE','0')));lexical_cache_strength=float(os.environ.get('LEXICAL_CACHE_STRENGTH',.02));lexical_cache_decay=float(os.environ.get('LEXICAL_CACHE_DECAY',.995));lexical_cache_topk=int(os.environ.get('LEXICAL_CACHE_TOPK',8));lexical_cache_size=int(os.environ.get('LEXICAL_CACHE_SIZE',8192));entropy_weighted_lexical_cache=bool(int(os.environ.get('ENTROPY_WEIGHTED_LEXICAL_CACHE','0')));lexical_cache_entropy_center=float(os.environ.get('LEXICAL_CACHE_ENTROPY_CENTER',3.2));lexical_cache_entropy_sharpness=float(os.environ.get('LEXICAL_CACHE_ENTROPY_SHARPNESS',2.0));lexical_cache_max_mult=float(os.environ.get('LEXICAL_CACHE_MAX_MULT',3.0));lexical_cache_min_mult=float(os.environ.get('LEXICAL_CACHE_MIN_MULT',0.0));lexical_cache_repetition_boost=float(os.environ.get('LEXICAL_CACHE_REPETITION_BOOST',1.5));use_suffix_cache=bool(int(os.environ.get('USE_SUFFIX_CACHE','0')));suffix_cache_max_order=int(os.environ.get('SUFFIX_CACHE_MAX_ORDER',4));suffix_cache_strength=float(os.environ.get('SUFFIX_CACHE_STRENGTH',.035));suffix_cache_decay=float(os.environ.get('SUFFIX_CACHE_DECAY',.997));suffix_cache_topk=int(os.environ.get('SUFFIX_CACHE_TOPK',8));suffix_cache_min_count=float(os.environ.get('SUFFIX_CACHE_MIN_COUNT',2.));suffix_cache_backoff=float(os.environ.get('SUFFIX_CACHE_BACKOFF',.55));suffix_cache_entropy_gate=bool(int(os.environ.get('SUFFIX_CACHE_ENTROPY_GATE','1')));suffix_cache_entropy_center=float(os.environ.get('SUFFIX_CACHE_ENTROPY_CENTER',3.15));suffix_cache_entropy_sharpness=float(os.environ.get('SUFFIX_CACHE_ENTROPY_SHARPNESS',2.5));etlb_enabled=bool(int(os.environ.get('ETLB_ENABLED','0')));etlb_lr=float(os.environ.get('ETLB_LR',.05));etlb_steps=int(os.environ.get('ETLB_STEPS',5));etlb_clip=float(os.environ.get('ETLB_CLIP',3.));compressor=os.environ.get('COMPRESSOR','brotli');gptq_calibration_batches=int(os.environ.get('GPTQ_CALIBRATION_BATCHES',64));gptq_reserve_seconds=float(os.environ.get('GPTQ_RESERVE_SECONDS',12.));matrix_bits=int(os.environ.get('MATRIX_BITS',6));embed_bits=int(os.environ.get('EMBED_BITS',8));matrix_clip_sigmas=float(os.environ.get('MATRIX_CLIP_SIGMAS',12.85));embed_clip_sigmas=float(os.environ.get('EMBED_CLIP_SIGMAS',2e1));distributed='RANK'in os.environ and'WORLD_SIZE'in os.environ;rank=int(os.environ.get('RANK','0'));world_size=int(os.environ.get('WORLD_SIZE','1'));local_rank=int(os.environ.get('LOCAL_RANK','0'));is_main_process=rank==0;grad_accum_steps=8//world_size;datasets_dir=os.path.join(data_dir,'datasets',f"fineweb10B_sp{vocab_size}");train_files=os.path.join(datasets_dir,'fineweb_train_*.bin');val_files=os.path.join(datasets_dir,'fineweb_val_*.bin');tokenizer_path=os.path.join(data_dir,'tokenizers',f"fineweb_{vocab_size}_bpe.model");logfile=f"logs/{run_id}.txt";model_path='final_model.pt';quantized_model_path='final_model.int6.ptz'
+class Hyperparameters:data_dir=os.environ.get('DATA_DIR','./data/');seed=int(os.environ.get('SEED',1337));run_id=os.environ.get('RUN_ID',str(uuid.uuid4()));iterations=int(os.environ.get('ITERATIONS',20000));warmdown_frac=float(os.environ.get('WARMDOWN_FRAC',.72));warmup_steps=int(os.environ.get('WARMUP_STEPS',20));train_batch_tokens=int(os.environ.get('TRAIN_BATCH_TOKENS',786432));train_seq_len=int(os.environ.get('TRAIN_SEQ_LEN',2048));train_log_every=int(os.environ.get('TRAIN_LOG_EVERY',500));max_wallclock_seconds=float(os.environ.get('MAX_WALLCLOCK_SECONDS',6e2));val_batch_tokens=int(os.environ.get('VAL_BATCH_TOKENS',524288));eval_seq_len=int(os.environ.get('EVAL_SEQ_LEN',2048));val_loss_every=int(os.environ.get('VAL_LOSS_EVERY',4000));sliding_window_enabled=bool(int(os.environ.get('SLIDING_WINDOW_ENABLED','1')));vocab_size=int(os.environ.get('VOCAB_SIZE',8192));num_layers=int(os.environ.get('NUM_LAYERS',11));xsa_last_n=int(os.environ.get('XSA_LAST_N',11));model_dim=int(os.environ.get('MODEL_DIM',512));embedding_dim=int(os.environ.get('EMBEDDING_DIM',512));num_kv_heads=int(os.environ.get('NUM_KV_HEADS',4));num_heads=int(os.environ.get('NUM_HEADS',8));mlp_mult=float(os.environ.get('MLP_MULT',4.));skip_gates_enabled=bool(int(os.environ.get('SKIP_GATES_ENABLED','1')));tie_embeddings=bool(int(os.environ.get('TIE_EMBEDDINGS','1')));logit_softcap=float(os.environ.get('LOGIT_SOFTCAP',3e1));rope_base=float(os.environ.get('ROPE_BASE',1e4));rope_dims=int(os.environ.get('ROPE_DIMS',16));rope_train_seq_len=int(os.environ.get('ROPE_TRAIN_SEQ_LEN',2048));ln_scale=bool(int(os.environ.get('LN_SCALE','1')));qk_gain_init=float(os.environ.get('QK_GAIN_INIT',5.));num_loops=int(os.environ.get('NUM_LOOPS',2));loop_start=int(os.environ.get('LOOP_START',3));loop_end=int(os.environ.get('LOOP_END',5));enable_looping_at=float(os.environ.get('ENABLE_LOOPING_AT',.35));parallel_residual_start=int(os.environ.get('PARALLEL_RESIDUAL_START',7));min_lr=float(os.environ.get('MIN_LR',.0));embed_lr=float(os.environ.get('EMBED_LR',.6));head_lr=float(os.environ.get('HEAD_LR',.008));tied_embed_lr=float(os.environ.get('TIED_EMBED_LR',.03));tied_embed_init_std=float(os.environ.get('TIED_EMBED_INIT_STD',.005));matrix_lr=float(os.environ.get('MATRIX_LR',.022));scalar_lr=float(os.environ.get('SCALAR_LR',.02));muon_momentum=float(os.environ.get('MUON_MOMENTUM',.99));muon_backend_steps=int(os.environ.get('MUON_BACKEND_STEPS',5));muon_momentum_warmup_start=float(os.environ.get('MUON_MOMENTUM_WARMUP_START',.92));muon_momentum_warmup_steps=int(os.environ.get('MUON_MOMENTUM_WARMUP_STEPS',1500));muon_row_normalize=bool(int(os.environ.get('MUON_ROW_NORMALIZE','1')));beta1=float(os.environ.get('BETA1',.9));beta2=float(os.environ.get('BETA2',.95));adam_eps=float(os.environ.get('ADAM_EPS',1e-08));grad_clip_norm=float(os.environ.get('GRAD_CLIP_NORM',.3));eval_stride=int(os.environ.get('EVAL_STRIDE',64));muon_beta2=float(os.environ.get('MUON_BETA2',.95));adam_wd=float(os.environ.get('ADAM_WD',.02));muon_wd=float(os.environ.get('MUON_WD',.095));embed_wd=float(os.environ.get('EMBED_WD',.085));ema_decay=float(os.environ.get('EMA_DECAY',.9965));ttt_enabled=bool(int(os.environ.get('TTT_ENABLED','0')));ttt_lr=float(os.environ.get('TTT_LR',.005));ttt_epochs=int(os.environ.get('TTT_EPOCHS',3));ttt_momentum=float(os.environ.get('TTT_MOMENTUM',.9));ttt_chunk_tokens=int(os.environ.get('TTT_CHUNK_TOKENS',32768));confidence_gated_ttt=bool(int(os.environ.get('CONFIDENCE_GATED_TTT','0')));ttt_entropy_threshold=float(os.environ.get('TTT_ENTROPY_THRESHOLD',3.6));ttt_low_conf_lr_scale=float(os.environ.get('TTT_LOW_CONF_LR_SCALE',1.0));ttt_high_conf_lr_scale=float(os.environ.get('TTT_HIGH_CONF_LR_SCALE',.25));use_lexical_cache=bool(int(os.environ.get('USE_LEXICAL_CACHE','0')));lexical_cache_strength=float(os.environ.get('LEXICAL_CACHE_STRENGTH',.02));lexical_cache_decay=float(os.environ.get('LEXICAL_CACHE_DECAY',.995));lexical_cache_topk=int(os.environ.get('LEXICAL_CACHE_TOPK',8));lexical_cache_size=int(os.environ.get('LEXICAL_CACHE_SIZE',8192));etlb_enabled=bool(int(os.environ.get('ETLB_ENABLED','0')));etlb_lr=float(os.environ.get('ETLB_LR',.05));etlb_steps=int(os.environ.get('ETLB_STEPS',5));etlb_clip=float(os.environ.get('ETLB_CLIP',3.));compressor=os.environ.get('COMPRESSOR','brotli');size_aware_qsearch=bool(int(os.environ.get('SIZE_AWARE_QSEARCH','0')));target_total_bytes=int(os.environ.get('TARGET_TOTAL_BYTES',15990000));qsearch_trials=int(os.environ.get('QSEARCH_TRIALS',12));qsearch_calib_tokens=int(os.environ.get('QSEARCH_CALIB_TOKENS',1048576));gptq_calibration_batches=int(os.environ.get('GPTQ_CALIBRATION_BATCHES',64));gptq_reserve_seconds=float(os.environ.get('GPTQ_RESERVE_SECONDS',12.));matrix_bits=int(os.environ.get('MATRIX_BITS',6));embed_bits=int(os.environ.get('EMBED_BITS',8));matrix_clip_sigmas=float(os.environ.get('MATRIX_CLIP_SIGMAS',12.85));embed_clip_sigmas=float(os.environ.get('EMBED_CLIP_SIGMAS',2e1));distributed='RANK'in os.environ and'WORLD_SIZE'in os.environ;rank=int(os.environ.get('RANK','0'));world_size=int(os.environ.get('WORLD_SIZE','1'));local_rank=int(os.environ.get('LOCAL_RANK','0'));is_main_process=rank==0;grad_accum_steps=8//world_size;datasets_dir=os.path.join(data_dir,'datasets',f"fineweb10B_sp{vocab_size}");train_files=os.path.join(datasets_dir,'fineweb_train_*.bin');val_files=os.path.join(datasets_dir,'fineweb_val_*.bin');tokenizer_path=os.path.join(data_dir,'tokenizers',f"fineweb_{vocab_size}_bpe.model");logfile=f"logs/{run_id}.txt";model_path='final_model.pt';quantized_model_path='final_model.int6.ptz'
 _logger_hparams=None
 def set_logging_hparams(h):global _logger_hparams;_logger_hparams=h
 def log(msg,console=True):
@@ -128,7 +128,7 @@ class GPT(nn.Module):
 			for i in range(max(0,h.num_layers-h.xsa_last_n),h.num_layers):self.blocks[i].attn.use_xsa=True
 		if h.parallel_residual_start>=0:
 			for i in range(h.parallel_residual_start,h.num_layers):self.blocks[i].parallel=True
-		self.looping_active=False;self.adaptive_recurrence_routing=h.adaptive_recurrence_routing;self.routing_entropy_threshold=h.routing_entropy_threshold;self.routing_novelty_threshold=h.routing_novelty_threshold;self.dual_timescale_state=h.dual_timescale_state;self.dts_slow_decay=h.dts_slow_decay;self.dts_blend=h.dts_blend
+		self.looping_active=False
 		if h.num_loops>0:
 			loop_seg=list(range(h.loop_start,h.loop_end+1));all_indices=list(range(h.loop_start))
 			for _ in range(h.num_loops+1):all_indices.extend(loop_seg)
@@ -141,48 +141,22 @@ class GPT(nn.Module):
 			if isinstance(module,nn.Linear):
 				if getattr(module,'_zero_init',False):nn.init.zeros_(module.weight)
 				elif module.weight.ndim==2 and module.weight.shape[0]>=64 and module.weight.shape[1]>=64:nn.init.orthogonal_(module.weight,gain=1.)
-	def _forward_backbone(self,input_ids):
+	def forward_logits(self,input_ids):
 		x=self.tok_emb(input_ids);x=F.rms_norm(x,(x.size(-1),))
 		if self.embed_proj is not None:x=self.embed_proj(x)
-		x0=x
-		def run_path(x_in,x_base,enc_iter,dec_iter):
-			x_local=x_in;skips=[];slow_state=x_local if self.dual_timescale_state else None
-			for i in enc_iter:
-				x_local=self.blocks[i](x_local,x_base);skips.append(x_local)
-				if slow_state is not None:
-					slow_state=self.dts_slow_decay*slow_state+(1.-self.dts_slow_decay)*x_local
-					x_local=(1.-self.dts_blend)*x_local+self.dts_blend*slow_state
-			for(skip_idx,i)in enumerate(dec_iter):
-				if skip_idx<self.num_skip_weights and skips:
-					scaled_skip=self.skip_weights[skip_idx].to(dtype=x_local.dtype)[None,None,:]*skips.pop()
-					if self.skip_gates is not None:g=torch.sigmoid(self.skip_gates[skip_idx].to(dtype=x_local.dtype))[None,None,:];x_local=torch.lerp(scaled_skip,x_local,g)
-					else:x_local=x_local+scaled_skip
-				x_local=self.blocks[i](x_local,x_base)
-				if slow_state is not None:
-					slow_state=self.dts_slow_decay*slow_state+(1.-self.dts_slow_decay)*x_local
-					x_local=(1.-self.dts_blend)*x_local+self.dts_blend*slow_state
-			return x_local
-		if self.looping_active and self.adaptive_recurrence_routing:
-			token_novelty=(input_ids[:,1:]!=input_ids[:,:-1]).float().mean()
-			entropy_hidden=x[:,-1,:]
-			if self.head_proj is not None:entropy_hidden=self.head_proj(entropy_hidden)
-			probs=F.softmax(F.linear(entropy_hidden,self.tok_emb.weight).float(),dim=-1)
-			predictive_entropy=(-(probs*torch.log(probs.clamp_min(1e-09))).sum(dim=-1)).mean()
-			novelty_gate=(token_novelty>=self.routing_novelty_threshold).to(dtype=x.dtype)
-			entropy_gate=(predictive_entropy>=self.routing_entropy_threshold).to(dtype=x.dtype)
-			route_gate=torch.maximum(novelty_gate,entropy_gate).view(1,1,1)
-			x_loop=run_path(x,x0,self.encoder_indices,self.decoder_indices);x_no_loop=run_path(x,x0,range(self.num_encoder_layers),range(self.num_encoder_layers,self.num_encoder_layers+self.num_decoder_layers));x=route_gate*x_loop+(1.-route_gate)*x_no_loop
-		else:
-			use_looping=self.looping_active;enc_iter=self.encoder_indices if use_looping else range(self.num_encoder_layers);dec_iter=self.decoder_indices if use_looping else range(self.num_encoder_layers,self.num_encoder_layers+self.num_decoder_layers);x=run_path(x,x0,enc_iter,dec_iter)
-		return self.final_norm(x)
-	def _project_from_backbone(self,x):
-		x_proj=self.head_proj(x)if self.head_proj is not None else x
-		if self.tie_embeddings:logits_proj=F.linear(x_proj,self.tok_emb.weight)
-		else:logits_proj=self.lm_head(x_proj)
+		x0=x;skips=[];enc_iter=self.encoder_indices if self.looping_active else range(self.num_encoder_layers);dec_iter=self.decoder_indices if self.looping_active else range(self.num_encoder_layers,self.num_encoder_layers+self.num_decoder_layers)
+		for i in enc_iter:x=self.blocks[i](x,x0);skips.append(x)
+		for(skip_idx,i)in enumerate(dec_iter):
+			if skip_idx<self.num_skip_weights and skips:
+				scaled_skip=self.skip_weights[skip_idx].to(dtype=x.dtype)[None,None,:]*skips.pop()
+				if self.skip_gates is not None:g=torch.sigmoid(self.skip_gates[skip_idx].to(dtype=x.dtype))[None,None,:];x=torch.lerp(scaled_skip,x,g)
+				else:x=x+scaled_skip
+			x=self.blocks[i](x,x0)
+		x=self.final_norm(x)
+		if self.head_proj is not None:x=self.head_proj(x)
+		if self.tie_embeddings:logits_proj=F.linear(x,self.tok_emb.weight)
+		else:logits_proj=self.lm_head(x)
 		return self.logit_softcap*torch.tanh(logits_proj/self.logit_softcap)
-	def forward_logits(self,input_ids):
-		x=self._forward_backbone(input_ids)
-		return self._project_from_backbone(x)
 	def forward(self,input_ids,target_ids):logits=self.forward_logits(input_ids);return F.cross_entropy(logits.reshape(-1,logits.size(-1)).float(),target_ids.reshape(-1),reduction='mean')
 def classify_param(name):
 	if'tok_emb'in name or'lm_head'in name:return'embed'
@@ -331,7 +305,28 @@ def _decompress(data,compressor):
 def serialize(h,base_model,code):
 	code_bytes=len(code.encode('utf-8'))
 	if h.is_main_process:torch.save(base_model.state_dict(),h.model_path);model_bytes=os.path.getsize(h.model_path);log(f"Serialized model: {model_bytes} bytes");log(f"Code size: {code_bytes} bytes")
-	sd_cpu={k:v.detach().cpu()for(k,v)in base_model.state_dict().items()};device=torch.device('cuda',h.local_rank);log('GPTQ:collecting Hessians from calibration data...');t0=time.perf_counter();calib_loader=ShuffledSequenceLoader(h,device);hessians=collect_hessians(base_model,calib_loader,h,device,n_calibration_batches=h.gptq_calibration_batches);log(f"GPTQ:collected {len(hessians)} Hessians in {time.perf_counter()-t0:.1f}s");quant_result,quant_meta=gptq_mixed_quantize(sd_cpu,hessians,h);quant_buf=io.BytesIO();torch.save({'w':quant_result,'m':quant_meta},quant_buf);quant_raw=quant_buf.getvalue();quant_blob=_compress(quant_raw,h.compressor);quant_file_bytes=len(quant_blob);bytes_total=quant_file_bytes+code_bytes
+	sd_cpu={k:v.detach().cpu()for(k,v)in base_model.state_dict().items()};device=torch.device('cuda',h.local_rank);log('GPTQ:collecting Hessians from calibration data...');t0=time.perf_counter();calib_loader=ShuffledSequenceLoader(h,device);hessians=collect_hessians(base_model,calib_loader,h,device,n_calibration_batches=h.gptq_calibration_batches);log(f"GPTQ:collected {len(hessians)} Hessians in {time.perf_counter()-t0:.1f}s")
+	def _quick_val_metric(quant_result,quant_meta):
+		eval_model=GPT(h).to(device).bfloat16();restore_fp32_params(eval_model);template={k:v.detach().cpu()for(k,v)in eval_model.state_dict().items()};eval_model.load_state_dict(dequantize_mixed(quant_result,quant_meta,template),strict=True);eval_model.eval();subset=load_validation_tokens(h.val_files,h.eval_seq_len);limit=max(h.eval_seq_len,min(h.qsearch_calib_tokens,subset.numel()-1));subset=subset[:limit+1].to(device=device,dtype=torch.int64);seq_len=h.eval_seq_len;usable=(subset.numel()-1)//seq_len*seq_len;subset=subset[:usable+1];x=subset[:-1].reshape(-1,seq_len);y=subset[1:].reshape(-1,seq_len)
+		with torch.no_grad():
+			with torch.autocast(device_type='cuda',dtype=torch.bfloat16):loss=eval_model(x,y).detach()
+		return float(loss.item()/math.log(2.))
+	def _pack_candidate(quant_result,quant_meta,compressor):
+		buf=io.BytesIO();torch.save({'w':quant_result,'m':quant_meta},buf);blob=_compress(buf.getvalue(),compressor);return blob,len(blob),len(blob)+code_bytes
+	best=None
+	if h.size_aware_qsearch:
+		matrix_grid=[11.5,12.0,12.5,12.85,13.25,13.75];embed_grid=[16.,18.,20.,22.];trials=[(m,e,'brotli')for m in matrix_grid for e in embed_grid][:h.qsearch_trials]
+		log(f"qsearch:start trials={len(trials)} target_total_bytes={h.target_total_bytes}")
+		for(mc,ec,comp)in trials:
+			h_trial=copy.copy(h);h_trial.matrix_clip_sigmas=mc;h_trial.embed_clip_sigmas=ec;quant_result,quant_meta=gptq_mixed_quantize(sd_cpu,hessians,h_trial);blob,qbytes,total=_pack_candidate(quant_result,quant_meta,comp)
+			if total>h.target_total_bytes:continue
+			score=_quick_val_metric(quant_result,quant_meta)
+			if best is None or score<best['score']:best={'blob':blob,'qbytes':qbytes,'total':total,'score':score,'comp':comp,'mc':mc,'ec':ec}
+		if best is not None:log(f"qsearch:best score={best['score']:.6f} matrix_clip={best['mc']} embed_clip={best['ec']} bytes={best['total']}")
+	if best is None:
+		quant_result,quant_meta=gptq_mixed_quantize(sd_cpu,hessians,h);quant_blob,quant_file_bytes,bytes_total=_pack_candidate(quant_result,quant_meta,h.compressor)
+	else:
+		quant_blob=best['blob'];quant_file_bytes=best['qbytes'];bytes_total=best['total']
 	if h.is_main_process:
 		with open(h.quantized_model_path,'wb')as f:f.write(quant_blob)
 		log(f"Serialized model quantized+{h.compressor}: {quant_file_bytes} bytes");log(f"Total submission size quantized+{h.compressor}: {bytes_total} bytes")
@@ -341,116 +336,6 @@ def deserialize(h,device):
 	with open(h.quantized_model_path,'rb')as f:quant_blob_disk=f.read()
 	quant_state=torch.load(io.BytesIO(_decompress(quant_blob_disk,h.compressor)),map_location='cpu');deq_state=dequantize_mixed(quant_state['w'],quant_state['m'],sd_cpu);eval_model.load_state_dict(deq_state,strict=True);return eval_model
 def _loss_bpb(loss_sum,token_count,byte_count):val_loss=(loss_sum/token_count).item();val_bpb=val_loss/math.log(2.)*(token_count.item()/byte_count.item());return val_loss,val_bpb
-_LEXICAL_CACHE_FLAGS_LOGGED=False
-_SUFFIX_CACHE_FLAGS_LOGGED=False
-def _new_lexical_cache(h):
-	global _LEXICAL_CACHE_FLAGS_LOGGED
-	if not(h.use_lexical_cache and h.lexical_cache_topk>0 and h.lexical_cache_size>0):return None
-	if not _LEXICAL_CACHE_FLAGS_LOGGED:
-		log(f"lexical_cache:enabled weighted={int(h.entropy_weighted_lexical_cache)} strength={h.lexical_cache_strength} decay={h.lexical_cache_decay} topk={h.lexical_cache_topk} size={h.lexical_cache_size} rep_boost={h.lexical_cache_repetition_boost} ent_center={h.lexical_cache_entropy_center} ent_sharpness={h.lexical_cache_entropy_sharpness} ent_mult=[{h.lexical_cache_min_mult},{h.lexical_cache_max_mult}]")
-		_LEXICAL_CACHE_FLAGS_LOGGED=True
-	return{'rows':collections.OrderedDict(),'recent_prev':collections.deque(maxlen=4096)}
-def _lexical_cache_bias_logits(logits_row,prev_token,cache,h,entropy=None):
-	if cache is None:return logits_row
-	entry=cache['rows'].get(int(prev_token))
-	if not entry:return logits_row
-	top_items=sorted(entry.items(),key=lambda kv:kv[1],reverse=True)[:h.lexical_cache_topk]
-	if not top_items:return logits_row
-	idx=torch.tensor([tok for(tok,_)in top_items],device=logits_row.device,dtype=torch.long);counts=torch.tensor([cnt for(_,cnt)in top_items],device=logits_row.device,dtype=logits_row.dtype);bias_mult=torch.ones((),device=logits_row.device,dtype=logits_row.dtype)
-	if h.entropy_weighted_lexical_cache and entropy is not None:
-		entropy_mult=torch.sigmoid((entropy-h.lexical_cache_entropy_center)*h.lexical_cache_entropy_sharpness)
-		bias_mult=h.lexical_cache_min_mult+(h.lexical_cache_max_mult-h.lexical_cache_min_mult)*entropy_mult
-		if int(prev_token)in cache['recent_prev']:bias_mult=bias_mult*h.lexical_cache_repetition_boost
-	biased=logits_row.clone();biased.index_add_(0,idx,h.lexical_cache_strength*bias_mult*torch.log1p(counts));return biased
-def _lexical_cache_update(cache,prev_token,next_token,h):
-	if cache is None:return
-	prev=int(prev_token);nxt=int(next_token);entry=cache['rows'].get(prev)
-	if entry is None:
-		if len(cache['rows'])>=h.lexical_cache_size:cache['rows'].popitem(last=False)
-		entry={};cache['rows'][prev]=entry
-	else:cache['rows'].move_to_end(prev,last=True)
-	for k in list(entry.keys()):
-		v=entry[k]*h.lexical_cache_decay
-		if v<=1e-08:del entry[k]
-		else:entry[k]=v
-	entry[nxt]=entry.get(nxt,0.)+1.
-	if len(entry)>h.lexical_cache_topk:
-		for(k,_)in sorted(entry.items(),key=lambda kv:kv[1],reverse=True)[h.lexical_cache_topk:]:del entry[k]
-	cache['recent_prev'].append(prev)
-def _new_suffix_cache(h):
-	global _SUFFIX_CACHE_FLAGS_LOGGED
-	max_order=max(1,min(h.suffix_cache_max_order,4))
-	if not(h.use_suffix_cache and h.suffix_cache_topk>0 and h.suffix_cache_strength>0):return None
-	if not _SUFFIX_CACHE_FLAGS_LOGGED:
-		log(f"suffix_cache:enabled max_order={max_order} strength={h.suffix_cache_strength} decay={h.suffix_cache_decay} topk={h.suffix_cache_topk} min_count={h.suffix_cache_min_count} backoff={h.suffix_cache_backoff} ent_gate={int(h.suffix_cache_entropy_gate)} ent_center={h.suffix_cache_entropy_center} ent_sharpness={h.suffix_cache_entropy_sharpness}")
-		_SUFFIX_CACHE_FLAGS_LOGGED=True
-	return{'max_order':max_order,'orders':{o:{}for o in range(1,max_order+1)}}
-def _suffix_cache_bias_logits(logits_row,context_tokens,cache,h,entropy=None):
-	if cache is None:return logits_row
-	entropy_mult=torch.ones((),device=logits_row.device,dtype=logits_row.dtype)
-	if h.suffix_cache_entropy_gate and entropy is not None:entropy_mult=torch.sigmoid((entropy-h.suffix_cache_entropy_center)*h.suffix_cache_entropy_sharpness)
-	accum={}
-	for order in range(cache['max_order'],0,-1):
-		if len(context_tokens)<order:continue
-		ctx=tuple(context_tokens[-order:]);entry=cache['orders'][order].get(ctx)
-		if not entry:continue
-		backoff_w=h.suffix_cache_backoff**(cache['max_order']-order);top_items=[(tok,cnt)for(tok,cnt)in sorted(entry.items(),key=lambda kv:kv[1],reverse=True)if cnt>=h.suffix_cache_min_count][:h.suffix_cache_topk]
-		for(tok,cnt)in top_items:accum[tok]=accum.get(tok,0.)+h.suffix_cache_strength*backoff_w*math.log1p(cnt)
-	if not accum:return logits_row
-	idx=torch.tensor(list(accum.keys()),device=logits_row.device,dtype=torch.long);vals=torch.tensor(list(accum.values()),device=logits_row.device,dtype=logits_row.dtype);biased=logits_row.clone();biased.index_add_(0,idx,vals*entropy_mult);return biased
-def _suffix_cache_update(cache,context_tokens,next_token,h):
-	if cache is None:return
-	nxt=int(next_token)
-	for order in range(1,cache['max_order']+1):
-		if len(context_tokens)<order:continue
-		ctx=tuple(context_tokens[-order:]);table=cache['orders'][order];entry=table.get(ctx)
-		if entry is None:entry={};table[ctx]=entry
-		for tok in list(entry.keys()):
-			v=entry[tok]*h.suffix_cache_decay
-			if v<=1e-08:del entry[tok]
-			else:entry[tok]=v
-		entry[nxt]=entry.get(nxt,0.)+1.
-		if len(entry)>h.suffix_cache_topk:
-			for(tok,_)in sorted(entry.items(),key=lambda kv:kv[1],reverse=True)[h.suffix_cache_topk:]:del entry[tok]
-def _new_rdc_state(h,device,vocab_size):
-	if not h.use_rdc:return None
-	return{'delta_logits':torch.zeros(vocab_size,device=device,dtype=torch.float32)}
-def _rdc_apply(logits_row,rdc_state):
-	if rdc_state is None:return logits_row
-	return logits_row+rdc_state['delta_logits']
-def _rdc_update(rdc_state,corrected_logits,target_token,h):
-	if rdc_state is None:return
-	grad=F.softmax(corrected_logits,dim=-1);grad[int(target_token)]-=1.;rdc_state['delta_logits'].mul_(h.rdc_momentum).add_(grad,alpha=-h.rdc_lr);rdc_state['delta_logits'].mul_(h.rdc_decay);rdc_state['delta_logits'].clamp_(-h.rdc_clip,h.rdc_clip)
-def _new_ctr_state(h,device):
-	if not h.use_ctr:return None
-	return{'scale':torch.ones((),device=device,dtype=torch.float32),'shift':torch.zeros((),device=device,dtype=torch.float32)}
-def _ctr_apply(logits_row,ctr_state):
-	if ctr_state is None:return logits_row
-	return logits_row*ctr_state['scale']+ctr_state['shift']
-def _ctr_update(ctr_state,corrected_logits,target_token,h):
-	if ctr_state is None:return
-	grad=F.softmax(corrected_logits,dim=-1);grad[int(target_token)]-=1.;mean_grad=grad.mean();ctr_state['scale'].add_(mean_grad,alpha=-h.ctr_scale_lr);ctr_state['shift'].add_(mean_grad,alpha=-h.ctr_shift_lr);ctr_state['scale'].mul_(h.ctr_decay);ctr_state['shift'].mul_(h.ctr_decay);ctr_state['scale'].clamp_(1.-h.ctr_clip,1.+h.ctr_clip);ctr_state['shift'].clamp_(-h.ctr_clip,h.ctr_clip)
-def _new_ttla_state(h,device,model_dim):
-	if not h.use_ttla:return None
-	a=torch.randn(model_dim,h.ttla_dim,device=device,dtype=torch.float32)*.01;b=torch.randn(h.ttla_dim,model_dim,device=device,dtype=torch.float32)*.01;a.requires_grad_(True);b.requires_grad_(True);return{'a':a,'b':b}
-def _ttla_apply_hidden(hidden_row,ttla_state):
-	if ttla_state is None:return hidden_row
-	delta=F.relu(hidden_row@ttla_state['a'])@ttla_state['b'];return hidden_row+delta
-def _project_row_from_backbone(base_model,hidden_row):
-	x=hidden_row
-	if base_model.head_proj is not None:x=F.linear(x,base_model.head_proj.weight.detach().to(dtype=x.dtype))
-	if base_model.tie_embeddings:logits=F.linear(x,base_model.tok_emb.weight.detach().to(dtype=x.dtype))
-	else:logits=F.linear(x,base_model.lm_head.weight.detach().to(dtype=x.dtype))
-	return base_model.logit_softcap*torch.tanh(logits/base_model.logit_softcap)
-def _ttla_update(ttla_state,loss,h):
-	if ttla_state is None:return
-	for p in(ttla_state['a'],ttla_state['b']):
-		if p.grad is not None:p.grad.zero_()
-	loss.backward()
-	with torch.no_grad():
-		for p in(ttla_state['a'],ttla_state['b']):
-			if p.grad is not None:p.add_(p.grad,alpha=-h.ttla_lr)
-			p.mul_(h.ttla_decay);p.clamp_(-h.ttla_clip,h.ttla_clip)
 def eval_val(h,device,val_data,model):
 	seq_len=h.eval_seq_len;local_batch_tokens=h.val_batch_tokens//(h.world_size*h.grad_accum_steps)
 	if local_batch_tokens<seq_len:raise ValueError(f"VAL_BATCH_SIZE must provide at least one sequence per rank; got VAL_BATCH_SIZE={h.val_batch_tokens}, WORLD_SIZE={h.world_size}, GRAD_ACCUM_STEPS={h.grad_accum_steps}, seq_len={seq_len}")
@@ -462,60 +347,69 @@ def eval_val(h,device,val_data,model):
 			batch_token_count=float(y.numel());val_loss_sum+=batch_loss.to(torch.float64)*batch_token_count;val_token_count+=batch_token_count;prev_ids=x.reshape(-1);tgt_ids=y.reshape(-1);token_bytes=val_data.base_bytes_lut[tgt_ids].to(dtype=torch.int16);token_bytes+=(val_data.has_leading_space_lut[tgt_ids]&~val_data.is_boundary_token_lut[prev_ids]).to(dtype=torch.int16);val_byte_count+=token_bytes.to(torch.float64).sum()
 	if dist.is_available()and dist.is_initialized():dist.all_reduce(val_loss_sum,op=dist.ReduceOp.SUM);dist.all_reduce(val_token_count,op=dist.ReduceOp.SUM);dist.all_reduce(val_byte_count,op=dist.ReduceOp.SUM)
 	model.train();return _loss_bpb(val_loss_sum,val_token_count,val_byte_count)
+def _new_lexical_cache(h):return collections.OrderedDict()if h.use_lexical_cache and h.lexical_cache_topk>0 and h.lexical_cache_size>0 else None
+def _lexical_cache_bias(logits_row,prev_token,cache,h):
+	if cache is None:return logits_row
+	entry=cache.get(int(prev_token))
+	if not entry:return logits_row
+	top_items=sorted(entry.items(),key=lambda kv:kv[1],reverse=True)[:h.lexical_cache_topk]
+	if not top_items:return logits_row
+	idx=torch.tensor([tok for(tok,_)in top_items],device=logits_row.device,dtype=torch.long);counts=torch.tensor([cnt for(_,cnt)in top_items],device=logits_row.device,dtype=logits_row.dtype);out=logits_row.clone();out.index_add_(0,idx,h.lexical_cache_strength*torch.log1p(counts));return out
+def _lexical_cache_update(cache,prev_token,next_token,h):
+	if cache is None:return
+	prev=int(prev_token);nxt=int(next_token);entry=cache.get(prev)
+	if entry is None:
+		if len(cache)>=h.lexical_cache_size:cache.popitem(last=False)
+		entry={};cache[prev]=entry
+	else:cache.move_to_end(prev,last=True)
+	for k in list(entry.keys()):
+		v=entry[k]*h.lexical_cache_decay
+		if v<=1e-08:del entry[k]
+		else:entry[k]=v
+	entry[nxt]=entry.get(nxt,0.)+1.
+	if len(entry)>h.lexical_cache_topk:
+		for(k,_)in sorted(entry.items(),key=lambda kv:kv[1],reverse=True)[h.lexical_cache_topk:]:del entry[k]
 def eval_val_sliding(h,device,val_data,base_model,batch_seqs=32):
-	base_model.eval();logits_fn=torch.compile(base_model.forward_logits,dynamic=False,fullgraph=True);seq_len=h.eval_seq_len;context_size=seq_len-h.eval_stride;total_tokens=val_data.val_tokens.numel()-1;window_starts=[ws for ws in range(0,total_tokens,h.eval_stride)if ws+context_size<total_tokens];total_windows=len(window_starts);my_s=total_windows*h.rank//h.world_size;my_e=total_windows*(h.rank+1)//h.world_size;my_windows=window_starts[my_s:my_e];loss_sum=torch.zeros((),device=device,dtype=torch.float64);token_count=torch.zeros((),device=device,dtype=torch.float64);byte_count=torch.zeros((),device=device,dtype=torch.float64);lexical_cache=_new_lexical_cache(h);suffix_cache=_new_suffix_cache(h);rdc_state=_new_rdc_state(h,device,h.vocab_size);ctr_state=_new_ctr_state(h,device);ttla_state=_new_ttla_state(h,device,base_model.blocks[0].attn_scale.numel())
-	with(torch.inference_mode()if ttla_state is None else torch.enable_grad()):
+	base_model.eval();logits_fn=torch.compile(base_model.forward_logits,dynamic=False,fullgraph=True);seq_len=h.eval_seq_len;context_size=seq_len-h.eval_stride;total_tokens=val_data.val_tokens.numel()-1;window_starts=[ws for ws in range(0,total_tokens,h.eval_stride)if ws+context_size<total_tokens];total_windows=len(window_starts);my_s=total_windows*h.rank//h.world_size;my_e=total_windows*(h.rank+1)//h.world_size;my_windows=window_starts[my_s:my_e];loss_sum=torch.zeros((),device=device,dtype=torch.float64);token_count=torch.zeros((),device=device,dtype=torch.float64);byte_count=torch.zeros((),device=device,dtype=torch.float64);lex_cache=_new_lexical_cache(h)
+	with torch.inference_mode():
 		for bi in range(0,len(my_windows),batch_seqs):
 			batch_ws=my_windows[bi:bi+batch_seqs];bsz=len(batch_ws);x_batch=torch.zeros(bsz,seq_len,dtype=torch.int64,device=device);y_batch=torch.zeros(bsz,seq_len,dtype=torch.int64,device=device);wlens=[]
 			for(i,ws)in enumerate(batch_ws):we=min(ws+seq_len,total_tokens);wlen=we-ws;wlens.append(wlen);chunk=val_data.val_tokens[ws:we+1].to(dtype=torch.int64,device=device);x_batch[i,:wlen]=chunk[:-1];y_batch[i,:wlen]=chunk[1:]
 			with torch.autocast(device_type='cuda',dtype=torch.bfloat16):logits=logits_fn(x_batch)
-			with torch.no_grad():
-				if ttla_state is not None:hidden_batch=base_model._forward_backbone(x_batch).float()
-				else:hidden_batch=None
 			for(i,ws)in enumerate(batch_ws):
 				wlen=wlens[i];s=0 if ws==0 else context_size;tgt=y_batch[i,s:wlen];prev=x_batch[i,s:wlen]
-				if lexical_cache is None and suffix_cache is None and rdc_state is None and ctr_state is None and ttla_state is None:scored_nll=F.cross_entropy(logits[i,s:wlen].float(),tgt,reduction='none')
+				if lex_cache is None:scored_nll=F.cross_entropy(logits[i,s:wlen].float(),tgt,reduction='none')
 				else:
-					scored_losses=[]
+					l=[]
 					for pos in range(s,wlen):
-						raw_row=logits[i,pos].float()if ttla_state is None else _project_row_from_backbone(base_model,_ttla_apply_hidden(hidden_batch[i,pos],ttla_state));entropy=None
-						if h.entropy_weighted_lexical_cache:raw_probs=F.softmax(raw_row,dim=-1);entropy=-(raw_probs*torch.log(raw_probs.clamp_min(1e-09))).sum()
-						if entropy is None and h.suffix_cache_entropy_gate:raw_probs=F.softmax(raw_row,dim=-1);entropy=-(raw_probs*torch.log(raw_probs.clamp_min(1e-09))).sum()
-						context_tokens=x_batch[i,:pos+1].tolist();biased_row=_lexical_cache_bias_logits(raw_row,x_batch[i,pos],lexical_cache,h,entropy=entropy);biased_row=_suffix_cache_bias_logits(biased_row,context_tokens,suffix_cache,h,entropy=entropy);rdc_row=_rdc_apply(biased_row,rdc_state);corrected_row=_ctr_apply(rdc_row,ctr_state);token_loss=F.cross_entropy(corrected_row.unsqueeze(0),y_batch[i,pos].unsqueeze(0),reduction='none');scored_losses.append(token_loss);_ttla_update(ttla_state,token_loss,h);_rdc_update(rdc_state,rdc_row,y_batch[i,pos],h);_ctr_update(ctr_state,corrected_row,y_batch[i,pos],h);_lexical_cache_update(lexical_cache,x_batch[i,pos],y_batch[i,pos],h);_suffix_cache_update(suffix_cache,context_tokens,y_batch[i,pos],h)
-					scored_nll=torch.cat(scored_losses,dim=0)if scored_losses else torch.zeros((0,),device=device,dtype=torch.float32)
+						row=_lexical_cache_bias(logits[i,pos].float(),x_batch[i,pos],lex_cache,h);l.append(F.cross_entropy(row.unsqueeze(0),y_batch[i,pos].unsqueeze(0),reduction='none'));_lexical_cache_update(lex_cache,x_batch[i,pos],y_batch[i,pos],h)
+					scored_nll=torch.cat(l,dim=0)if l else torch.zeros((0,),device=device,dtype=torch.float32)
 				scored_nll=scored_nll.to(torch.float64);loss_sum+=scored_nll.sum();token_count+=float(wlen-s);tb=val_data.base_bytes_lut[tgt].to(torch.float64);tb+=(val_data.has_leading_space_lut[tgt]&~val_data.is_boundary_token_lut[prev]).to(torch.float64);byte_count+=tb.sum()
 	if dist.is_available()and dist.is_initialized():dist.all_reduce(loss_sum,op=dist.ReduceOp.SUM);dist.all_reduce(token_count,op=dist.ReduceOp.SUM);dist.all_reduce(byte_count,op=dist.ReduceOp.SUM)
 	base_model.train();return _loss_bpb(loss_sum,token_count,byte_count)
 def eval_val_ttt(h,device,val_data,base_model,batch_seqs=32):
 	rank=h.rank;world_size=h.world_size;seq_len=h.eval_seq_len;stride=h.eval_stride;total_tokens=val_data.val_tokens.numel()-1;ttt_chunk=h.ttt_chunk_tokens;context_size=seq_len-stride;window_starts=[ws for ws in range(0,total_tokens,stride)if ws+context_size<total_tokens];num_chunks=(total_tokens+ttt_chunk-1)//ttt_chunk;chunk_windows=[[]for _ in range(num_chunks)]
 	for ws in window_starts:wlen=min(ws+seq_len,total_tokens)-ws;s=0 if ws==0 else context_size;scored_start=ws+s;ci=min(scored_start//ttt_chunk,num_chunks-1);chunk_windows[ci].append(ws)
-	log(f"ttt:start chunks={num_chunks} ttt_lr={h.ttt_lr} ttt_epochs={h.ttt_epochs}");compiled_logits=torch.compile(base_model.forward_logits,dynamic=False,fullgraph=True);loss_sum=torch.zeros((),device=device,dtype=torch.float64);token_count=torch.zeros((),device=device,dtype=torch.float64);byte_count=torch.zeros((),device=device,dtype=torch.float64);ttt_params=[p for p in base_model.parameters()];lexical_cache=_new_lexical_cache(h);suffix_cache=_new_suffix_cache(h);rdc_state=_new_rdc_state(h,device,h.vocab_size);ctr_state=_new_ctr_state(h,device);ttla_state=_new_ttla_state(h,device,base_model.blocks[0].attn_scale.numel())
+	log(f"ttt:start chunks={num_chunks} ttt_lr={h.ttt_lr} ttt_epochs={h.ttt_epochs}");compiled_logits=torch.compile(base_model.forward_logits,dynamic=False,fullgraph=True);loss_sum=torch.zeros((),device=device,dtype=torch.float64);token_count=torch.zeros((),device=device,dtype=torch.float64);byte_count=torch.zeros((),device=device,dtype=torch.float64);ttt_params=[p for p in base_model.parameters()];lex_cache=_new_lexical_cache(h)
 	for p in ttt_params:p.requires_grad_(True)
 	optimizer=torch.optim.SGD(ttt_params,lr=h.ttt_lr,momentum=h.ttt_momentum)
 	for ci in range(num_chunks):
 		windows=chunk_windows[ci]
 		if not windows:continue
-		chunk_credit_sum=torch.zeros((),device=device,dtype=torch.float64);chunk_credit_count=torch.zeros((),device=device,dtype=torch.float64)
 		chunk_start=ci*ttt_chunk;chunk_end=min((ci+1)*ttt_chunk,total_tokens);my_s=len(windows)*rank//world_size;my_e=len(windows)*(rank+1)//world_size;my_windows=windows[my_s:my_e];base_model.eval()
-		with(torch.no_grad()if ttla_state is None else torch.enable_grad()):
+		with torch.no_grad():
 			for bi in range(0,len(my_windows),batch_seqs):
 				batch_ws=my_windows[bi:bi+batch_seqs];bsz=len(batch_ws);x_batch=torch.zeros(bsz,seq_len,dtype=torch.int64,device=device);y_batch=torch.zeros(bsz,seq_len,dtype=torch.int64,device=device);wlens=[]
 				for(i,ws)in enumerate(batch_ws):we=min(ws+seq_len,total_tokens);wlen=we-ws;wlens.append(wlen);chunk_tok=val_data.val_tokens[ws:we+1].to(dtype=torch.int64,device=device);x_batch[i,:wlen]=chunk_tok[:-1];y_batch[i,:wlen]=chunk_tok[1:]
 				with torch.autocast(device_type='cuda',dtype=torch.bfloat16):logits=compiled_logits(x_batch)
-				with torch.no_grad():
-					if ttla_state is not None:hidden_batch=base_model._forward_backbone(x_batch).float()
-					else:hidden_batch=None
 				for(i,ws)in enumerate(batch_ws):
 					wlen=wlens[i];s=0 if ws==0 else context_size;tgt=y_batch[i,s:wlen];prev=x_batch[i,s:wlen]
-					if lexical_cache is None and suffix_cache is None and rdc_state is None and ctr_state is None and ttla_state is None:scored_nll=F.cross_entropy(logits[i,s:wlen].float(),tgt,reduction='none')
+					if lex_cache is None:scored_nll=F.cross_entropy(logits[i,s:wlen].float(),tgt,reduction='none')
 					else:
-						scored_losses=[]
+						l=[]
 						for pos in range(s,wlen):
-							raw_row=logits[i,pos].float()if ttla_state is None else _project_row_from_backbone(base_model,_ttla_apply_hidden(hidden_batch[i,pos],ttla_state));entropy=None
-							if h.entropy_weighted_lexical_cache:raw_probs=F.softmax(raw_row,dim=-1);entropy=-(raw_probs*torch.log(raw_probs.clamp_min(1e-09))).sum()
-							if entropy is None and h.suffix_cache_entropy_gate:raw_probs=F.softmax(raw_row,dim=-1);entropy=-(raw_probs*torch.log(raw_probs.clamp_min(1e-09))).sum()
-							context_tokens=x_batch[i,:pos+1].tolist();biased_row=_lexical_cache_bias_logits(raw_row,x_batch[i,pos],lexical_cache,h,entropy=entropy);biased_row=_suffix_cache_bias_logits(biased_row,context_tokens,suffix_cache,h,entropy=entropy);rdc_raw=_rdc_apply(raw_row,rdc_state);rdc_cached=_rdc_apply(biased_row,rdc_state);corrected_raw=_ctr_apply(rdc_raw,ctr_state);corrected_cached=_ctr_apply(rdc_cached,ctr_state);raw_token_loss=F.cross_entropy(corrected_raw.unsqueeze(0),y_batch[i,pos].unsqueeze(0),reduction='none');cached_token_loss=F.cross_entropy(corrected_cached.unsqueeze(0),y_batch[i,pos].unsqueeze(0),reduction='none');chosen_logits=corrected_cached if h.use_suffix_cache else corrected_raw;chosen_rdc=rdc_cached if h.use_suffix_cache else rdc_raw;token_loss=cached_token_loss if h.use_suffix_cache else raw_token_loss;scored_losses.append(token_loss);chunk_credit_sum+=(raw_token_loss-cached_token_loss).to(torch.float64).sum();chunk_credit_count+=1.;_ttla_update(ttla_state,token_loss,h);_rdc_update(rdc_state,chosen_rdc,y_batch[i,pos],h);_ctr_update(ctr_state,chosen_logits,y_batch[i,pos],h);_lexical_cache_update(lexical_cache,x_batch[i,pos],y_batch[i,pos],h);_suffix_cache_update(suffix_cache,context_tokens,y_batch[i,pos],h)
-						scored_nll=torch.cat(scored_losses,dim=0)if scored_losses else torch.zeros((0,),device=device,dtype=torch.float32)
+							row=_lexical_cache_bias(logits[i,pos].float(),x_batch[i,pos],lex_cache,h);l.append(F.cross_entropy(row.unsqueeze(0),y_batch[i,pos].unsqueeze(0),reduction='none'));_lexical_cache_update(lex_cache,x_batch[i,pos],y_batch[i,pos],h)
+						scored_nll=torch.cat(l,dim=0)if l else torch.zeros((0,),device=device,dtype=torch.float32)
 					scored_nll=scored_nll.to(torch.float64);loss_sum+=scored_nll.sum();token_count+=float(wlen-s);tb=val_data.base_bytes_lut[tgt].to(torch.float64);tb+=(val_data.has_leading_space_lut[tgt]&~val_data.is_boundary_token_lut[prev]).to(torch.float64);byte_count+=tb.sum()
 		is_last_chunk=ci==num_chunks-1
 		if not is_last_chunk and h.ttt_epochs>0:
@@ -523,23 +417,15 @@ def eval_val_ttt(h,device,val_data,base_model,batch_seqs=32):
 			if chunk_seqs>0:
 				lr_scale=1.
 				if h.confidence_gated_ttt:
-					entropy_sum=torch.zeros((),device=device,dtype=torch.float64);entropy_count=torch.zeros((),device=device,dtype=torch.float64)
-					my_seq_s=chunk_seqs*rank//world_size;my_seq_e=chunk_seqs*(rank+1)//world_size
+					entropy_sum=torch.zeros((),device=device,dtype=torch.float64);entropy_count=torch.zeros((),device=device,dtype=torch.float64);my_seq_s=chunk_seqs*rank//world_size;my_seq_e=chunk_seqs*(rank+1)//world_size
 					if my_seq_e>my_seq_s:
-						start_tok=chunk_start+my_seq_s*seq_len;end_tok=chunk_start+my_seq_e*seq_len+1;local=val_data.val_tokens[start_tok:end_tok].to(device=device,dtype=torch.int64)
-						x_entropy=local[:-1].reshape(-1,seq_len)
+						start_tok=chunk_start+my_seq_s*seq_len;end_tok=chunk_start+my_seq_e*seq_len+1;local=val_data.val_tokens[start_tok:end_tok].to(device=device,dtype=torch.int64);x_entropy=local[:-1].reshape(-1,seq_len)
 						with torch.no_grad():
 							with torch.autocast(device_type='cuda',dtype=torch.bfloat16):entropy_logits=compiled_logits(x_entropy)
 							entropy_probs=F.softmax(entropy_logits.float(),dim=-1);entropy_vals=-(entropy_probs*torch.log(entropy_probs.clamp_min(1e-09))).sum(dim=-1)
 						entropy_sum+=entropy_vals.to(torch.float64).sum();entropy_count+=float(entropy_vals.numel())
 					if dist.is_available()and dist.is_initialized():dist.all_reduce(entropy_sum,op=dist.ReduceOp.SUM);dist.all_reduce(entropy_count,op=dist.ReduceOp.SUM)
 					mean_entropy=(entropy_sum/entropy_count.clamp_min(1.)).to(torch.float32);low_conf=(mean_entropy>=h.ttt_entropy_threshold).to(torch.float32);lr_scale=low_conf*h.ttt_low_conf_lr_scale+(1.-low_conf)*h.ttt_high_conf_lr_scale
-				if h.adaptive_ttt_credit and h.use_suffix_cache:
-					credit_sum=chunk_credit_sum.clone();credit_count=chunk_credit_count.clone()
-					if dist.is_available()and dist.is_initialized():dist.all_reduce(credit_sum,op=dist.ReduceOp.SUM);dist.all_reduce(credit_count,op=dist.ReduceOp.SUM)
-					credit_mean=float((credit_sum/credit_count.clamp_min(1.)).item())
-					if credit_mean>h.ttt_credit_margin:lr_scale=lr_scale*h.ttt_credit_downscale
-					elif credit_mean<-h.ttt_credit_margin:lr_scale=lr_scale*h.ttt_credit_upscale
 				cos_lr=h.ttt_lr*.5*(1.+math.cos(math.pi*ci/max(num_chunks-1,1)))*lr_scale
 				for pg in optimizer.param_groups:pg['lr']=cos_lr
 				my_seq_s=chunk_seqs*rank//world_size;my_seq_e=chunk_seqs*(rank+1)//world_size;my_chunk_seqs=my_seq_e-my_seq_s
