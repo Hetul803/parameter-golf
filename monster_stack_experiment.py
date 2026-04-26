@@ -168,6 +168,9 @@ class GPT(nn.Module):
 		adapter_A=getattr(self,'ttt_adapter_A',None);adapter_B=getattr(self,'ttt_adapter_B',None)
 		if adapter_A is not None and adapter_B is not None:
 			feat=torch.matmul(x,adapter_A.to(dtype=x.dtype));x=x+float(getattr(self,'ttt_adapter_scale',1.))*torch.matmul(feat,adapter_B.to(dtype=x.dtype))
+		mem=getattr(self,'ttt_memory_vec',None)
+		if mem is not None:
+			x=x+float(getattr(self,'ttt_memory_scale',0.02))*mem.to(dtype=x.dtype)[None,None,:]
 		if self.tie_embeddings:logits_proj=F.linear(x,self.tok_emb.weight)
 		else:logits_proj=self.lm_head(x)
 		return self.logit_softcap*torch.tanh(logits_proj/self.logit_softcap)
@@ -405,6 +408,7 @@ def eval_val_ttt(h,device,val_data,base_model,batch_seqs=32):
 				with torch.autocast(device_type='cuda',dtype=torch.bfloat16):logits=compiled_logits(x_batch)
 				nll=F.cross_entropy(logits.reshape(-1,logits.size(-1)).float(),y_batch.reshape(-1),reduction='none').reshape(bsz,seq_len)
 				for(i,ws)in enumerate(batch_ws):wlen=wlens[i];s=0 if ws==0 else context_size;scored_nll=nll[i,s:wlen].to(torch.float64);loss_sum+=scored_nll.sum();token_count+=float(wlen-s);tgt=y_batch[i,s:wlen];prev=x_batch[i,s:wlen];tb=val_data.base_bytes_lut[tgt].to(torch.float64);tb+=(val_data.has_leading_space_lut[tgt]&~val_data.is_boundary_token_lut[prev]).to(torch.float64);byte_count+=tb.sum()
+		_update_causal_memory(base_model,val_data.val_tokens[chunk_start:chunk_end].to(dtype=torch.int64,device=device))
 		is_last_chunk=ci==num_chunks-1
 		if not is_last_chunk and h.ttt_epochs>0:
 			base_model.train();chunk_seqs=(chunk_end-chunk_start)//seq_len
